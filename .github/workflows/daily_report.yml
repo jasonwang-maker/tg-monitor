@@ -28,7 +28,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Restore Telegram session
-        run: echo "${{ secrets.TG_SESSION_B64 }}" | base64 -d > session_file.session
+        run: echo "${{ secrets.TG_SESSION_B64 }}" | base64 -d | gunzip > session_file.session
 
       - name: Fetch messages
         run: python daily_fetch.py
