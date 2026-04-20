@@ -8,6 +8,43 @@ WORK_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(WORK_DIR, 'data')
 TZ_UTC8 = timezone(timedelta(hours=8))
 
+CHANNEL_DESC = {
+    'netblocks': '全球断网/封锁实时监测',
+    'usher2': '俄罗斯互联网封锁追踪 (Эшер II)',
+    'zatelecom': '俄罗斯电信行业动态 (ЗаТелеком)',
+    'INTERNETFORIRAN': '伊朗互联网自由',
+    'vps_xhq': 'VPS信号旗播报 (中国/VPN行业)',
+}
+
+HTML_TEMPLATE = """<html>
+<body style="font-family: -apple-system, Arial, sans-serif; max-width: 780px; margin: 0 auto; color: #333; padding: 20px;">
+
+<h2 style="border-bottom: 2px solid #2563eb; padding-bottom: 8px; margin-bottom: 4px;">
+  📡 TG 频道监控日报
+</h2>
+<p style="color: #666; margin-top: 4px; font-size: 14px;">
+  监控时间：{time_range}<br>
+  监控频道：{channel_names}<br>
+  共抓取 <strong>{total} 条</strong>消息（{channel_counts}）
+</p>
+
+<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+
+{sections}
+
+<h3 style="color: #059669; margin-bottom: 8px;">📊 对 VPN 业务的影响提示</h3>
+<div style="background: #ecfdf5; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; line-height: 1.8; font-size: 14px;">
+{business_impact}
+</div>
+
+<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+<p style="color: #999; font-size: 12px;">
+  自动生成于 {gen_time} &nbsp;|&nbsp; 数据来源：Telegram 频道监控
+</p>
+
+</body>
+</html>"""
+
 
 def load_daily_json():
     now = datetime.now(TZ_UTC8)
@@ -21,71 +58,7 @@ def load_daily_json():
         return json.load(f), date_label
 
 
-def summarize(data, date_label):
-    channel_summary = []
-    total = 0
-    for ch, info in data['channels'].items():
-        n = len(info['messages'])
-        total += n
-        channel_summary.append(f"@{ch} ({info['title']}): {n}条")
-
-    header = f"监控频道: {', '.join(channel_summary)}。共{total}条消息。"
-
-    messages_text = ""
-    for ch, info in data['channels'].items():
-        if not info['messages']:
-            continue
-        messages_text += f"\n--- 频道: @{ch} ({info['title']}) ---\n"
-        for msg in info['messages']:
-            messages_text += f"[{msg['date']}] (views:{msg['views']}) {msg['text']}\n\n"
-
-    channel_list_html = ""
-    for ch, info in data['channels'].items():
-        n = len(info['messages'])
-        desc = {
-            'netblocks': '全球断网/封锁实时监测',
-            'usher2': '俄罗斯互联网封锁追踪 (Эшер II)',
-            'zatelecom': '俄罗斯电信行业动态 (ЗаТелеком)',
-            'INTERNETFORIRAN': '伊朗互联网自由',
-            'vps_xhq': 'VPS信号旗播报 (中国/VPN行业)',
-        }.get(ch, '')
-        channel_list_html += f"@{ch} ({info['title']}) — {desc} — {n}条消息\n"
-
-    prompt = f"""你是一个网络封锁舆情分析师，服务于一家 VPN 公司（主要客户为中国用户）。以下是今天从 Telegram 频道抓取的原始消息。
-
-## 监控频道
-{channel_list_html}
-时间范围: {data['range']}
-共计: {total}条消息
-
-## 原始消息
-{messages_text}
-
-## 任务
-生成一份简体中文 HTML 邮件报告。
-
-## 严格要求
-
-**格式要求：**
-1. 报告开头用表格列出每个频道的名称、说明、本期消息数量
-2. 按地区分类整理（伊朗、俄罗斯、中国、其他），每个地区用不同颜色区块
-3. 末尾加"对 VPN 业务的影响提示"
-4. HTML 格式，使用内联样式，适合邮件阅读
-5. 只输出 HTML 代码，不要包含 ```html 标记
-
-**内容要求：**
-1. 所有非简体中文内容（英文、俄文、波斯文）必须翻译为简体中文
-2. 不要给原始消息原文，整合翻译后给出详细摘要
-3. 每条有实质内容的消息都要被覆盖到，不要遗漏重要信息
-4. 包含具体数据点：天数、小时数、百分比、地区数量等原文提到的数字
-5. 技术细节要保留：协议名称（如 SNI Spoofing、VLESS、DPI）、工具名、具体封锁手段
-6. 如果某个地区没有消息，明确写"本期无相关消息"，不要编造内容
-
-**绝对禁止：**
-- 不要编造或推测原始消息中没有的信息
-- 不要添加原文中不存在的数据或事件
-- 如果信息不足以得出结论，就不要下结论"""
-
+def call_groq(prompt):
     resp = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={
@@ -95,18 +68,149 @@ def summarize(data, date_label):
         json={
             "model": "llama-3.3-70b-versatile",
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 4000,
-            "temperature": 0.3,
+            "max_tokens": 6000,
+            "temperature": 0.2,
         },
         timeout=120,
     )
     resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"]
 
-    html = resp.json()["choices"][0]["message"]["content"]
-    if html.startswith("```"):
-        html = html.split("\n", 1)[1]
-    if html.endswith("```"):
-        html = html.rsplit("```", 1)[0]
+
+def summarize(data, date_label):
+    channel_counts_list = []
+    total = 0
+    channel_names_list = []
+    for ch, info in data['channels'].items():
+        n = len(info['messages'])
+        total += n
+        channel_counts_list.append(f"{info['title']} {n}条")
+        channel_names_list.append(info['title'])
+
+    messages_text = ""
+    for ch, info in data['channels'].items():
+        if not info['messages']:
+            messages_text += f"\n--- 频道: @{ch} ({info['title']}) — {CHANNEL_DESC.get(ch, '')} ---\n(本期无消息)\n"
+            continue
+        messages_text += f"\n--- 频道: @{ch} ({info['title']}) — {CHANNEL_DESC.get(ch, '')} ---\n"
+        for msg in info['messages']:
+            messages_text += f"[{msg['date']}] (views:{msg['views']}) {msg['text']}\n\n"
+
+    prompt = f"""你是一个网络封锁舆情分析师。请根据以下原始消息，生成地区分类摘要。
+
+## 原始消息
+{messages_text}
+
+## 任务
+按地区分类（伊朗、俄罗斯、中国），对每个地区的消息进行翻译和深度整理。
+
+## 输出格式
+对每个有消息的地区，输出以下格式（用 === 分隔地区）：
+
+===地区名===
+标题：一句话总结该地区本期的核心动态
+内容：
+用多个加粗小标题分段（如 **断网现状：** **技术动态：** **社会影响：** 等），每段详细展开。要求：
+- 所有非简体中文内容必须翻译为简体中文
+- 保留所有具体数字（天数、小时、百分比、地区数量等）
+- 保留所有技术术语（SNI Spoofing、DPI、VLESS、NAT、Domain Fronting 等）
+- 每条有实质内容的原始消息都必须被覆盖，不要遗漏
+- 如果某地区没有消息，写"本期无相关消息"
+===END===
+
+最后输出：
+===业务影响===
+针对 VPN 公司（主要客户为中国用户）的业务影响提示，用要点列表。
+===END===
+
+## 严格禁止
+- 不要编造原始消息中没有的信息
+- 不要添加原文中不存在的数据或事件
+- 没有消息就说没有，不要填充"""
+
+    result = call_groq(prompt)
+
+    regions = {
+        '伊朗': {'color': '#dc2626', 'bg': '#fef2f2', 'flag': '🇮🇷'},
+        '俄罗斯': {'color': '#2563eb', 'bg': '#eff6ff', 'flag': '🇷🇺'},
+        '中国': {'color': '#d97706', 'bg': '#fffbeb', 'flag': '🇨🇳'},
+    }
+
+    sections_html = ""
+    business_html = ""
+
+    for region, style in regions.items():
+        marker = f"==={region}==="
+        if marker in result:
+            block = result.split(marker)[1].split("===END===")[0].strip()
+            if "===END===" not in result.split(marker)[1]:
+                block = result.split(marker)[1].strip()
+
+            title_line = ""
+            content = block
+            if block.startswith("标题：") or block.startswith("标题:"):
+                lines = block.split("\n", 1)
+                title_line = lines[0].replace("标题：", "").replace("标题:", "").strip()
+                content = lines[1].strip() if len(lines) > 1 else ""
+
+            if content.startswith("内容：") or content.startswith("内容:"):
+                content = content.split("\n", 1)[1].strip() if "\n" in content else content.replace("内容：", "").replace("内容:", "")
+
+            content_html = ""
+            for para in content.split("\n\n"):
+                para = para.strip()
+                if para:
+                    para = para.replace("\n", "<br>")
+                    content_html += f"<p>{para}</p>\n"
+            if not content_html:
+                for para in content.split("\n"):
+                    para = para.strip()
+                    if para:
+                        content_html += f"<p>{para}</p>\n"
+
+            header_text = f"{style['flag']} {region}"
+            if title_line:
+                header_text += f"：{title_line}"
+
+            sections_html += f"""
+<h3 style="color: {style['color']}; margin-bottom: 8px;">{header_text}</h3>
+<div style="background: {style['bg']}; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; line-height: 1.8; font-size: 14px;">
+{content_html}
+</div>
+"""
+        else:
+            sections_html += f"""
+<h3 style="color: {style['color']}; margin-bottom: 8px;">{style['flag']} {region}：本期无相关消息</h3>
+<div style="background: {style['bg']}; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; line-height: 1.8; font-size: 14px;">
+<p>本期监控的频道中未发现与{region}相关的新消息。</p>
+</div>
+"""
+
+    biz_marker = "===业务影响==="
+    if biz_marker in result:
+        biz_block = result.split(biz_marker)[1].split("===END===")[0].strip()
+        biz_html = ""
+        for line in biz_block.split("\n"):
+            line = line.strip()
+            if line and line != "内容：":
+                if line.startswith("- ") or line.startswith("* "):
+                    line = line[2:]
+                biz_html += f"<li>{line}</li>\n"
+        business_html = f'<ul style="margin: 0; padding-left: 20px;">\n{biz_html}</ul>'
+    else:
+        business_html = "<p>本期数据不足，暂无特别提示。</p>"
+
+    gen_time = datetime.now(TZ_UTC8).strftime('%Y-%m-%d %H:%M UTC+8')
+
+    html = HTML_TEMPLATE.format(
+        time_range=data['range'],
+        channel_names='、'.join(channel_names_list),
+        total=total,
+        channel_counts='、'.join(channel_counts_list),
+        sections=sections_html,
+        business_impact=business_html,
+        gen_time=gen_time,
+    )
 
     report_path = os.path.join(DATA_DIR, f"report_{date_label}.html")
     with open(report_path, 'w', encoding='utf-8') as f:
