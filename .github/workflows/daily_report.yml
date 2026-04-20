@@ -1,0 +1,43 @@
+name: TG Daily Report
+
+on:
+  schedule:
+    - cron: '50 1 * * *'  # UTC 01:50 = UTC+8 09:50
+  workflow_dispatch:        # 允许手动触发
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      TG_API_ID: ${{ secrets.TG_API_ID }}
+      TG_API_HASH: ${{ secrets.TG_API_HASH }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore Telegram session
+        run: echo "${{ secrets.TG_SESSION_B64 }}" | base64 -d > session_file.session
+
+      - name: Fetch messages
+        run: python daily_fetch.py
+
+      - name: Generate AI summary
+        run: python summarize.py
+
+      - name: Send email
+        run: |
+          DATE=$(python -c "from datetime import datetime,timedelta,timezone; print((datetime.now(timezone(timedelta(hours=8))).replace(hour=0,minute=0,second=0)-timedelta(days=1)).strftime('%Y-%m-%d'))")
+          TOTAL=$(python -c "import json; d=json.load(open('data/daily_${DATE}.json')); print(sum(len(v['messages']) for v in d['channels'].values()))")
+          python send_email.py "📡 TG 频道监控日报 ${DATE} (${TOTAL}条新消息)" "data/report_${DATE}.html"
