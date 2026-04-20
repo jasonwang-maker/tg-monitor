@@ -1,8 +1,8 @@
 import json
 import os
+import requests
 from datetime import datetime, timedelta, timezone
-from google import genai
-from config import GEMINI_API_KEY
+from config import GROQ_API_KEY
 
 WORK_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(WORK_DIR, 'data')
@@ -39,11 +39,7 @@ def summarize(data, date_label):
         for msg in info['messages']:
             messages_text += f"[{msg['date']}] (views:{msg['views']}) {msg['text']}\n\n"
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
-
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=f"""你是一个网络封锁舆情分析师，服务于一家 VPN 公司。以下是今天从多个 Telegram 频道抓取的原始消息。
+    prompt = f"""你是一个网络封锁舆情分析师，服务于一家 VPN 公司。以下是今天从多个 Telegram 频道抓取的原始消息。
 
 频道概况: {header}
 时间范围: {data['range']}
@@ -60,10 +56,25 @@ def summarize(data, date_label):
 5. 所有非简体中文内容翻译为简体中文
 6. 末尾加一段"对 VPN 业务的影响提示"
 7. HTML 格式美观、适合邮件阅读，使用内联样式
-8. 只输出 HTML 代码，不要包含 ```html 标记或其他说明文字""",
-    )
+8. 只输出 HTML 代码，不要包含 ```html 标记或其他说明文字"""
 
-    html = response.text
+    resp = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": "llama-3.3-70b-versatile",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 4000,
+            "temperature": 0.3,
+        },
+        timeout=120,
+    )
+    resp.raise_for_status()
+
+    html = resp.json()["choices"][0]["message"]["content"]
     if html.startswith("```"):
         html = html.split("\n", 1)[1]
     if html.endswith("```"):
