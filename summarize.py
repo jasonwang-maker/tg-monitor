@@ -94,7 +94,8 @@ def summarize(data, date_label):
             continue
         messages_text += f"\n--- 频道: @{ch} ({info['title']}) — {CHANNEL_DESC.get(ch, '')} ---\n"
         for msg in info['messages']:
-            messages_text += f"[{msg['date']}] (views:{msg['views']}) {msg['text']}\n\n"
+            text = msg['text'][:500] + ('...' if len(msg['text']) > 500 else '')
+            messages_text += f"[{msg['date']}] (views:{msg['views']}) {text}\n\n"
 
     prompt = f"""你是一个网络封锁舆情分析师。请根据以下原始消息，生成地区分类摘要。
 
