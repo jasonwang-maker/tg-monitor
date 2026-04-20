@@ -18,4 +18,4 @@ EMAIL_SMTP = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
 
-GROQ_API_KEY = os.environ['GROQ_API_KEY']
+GROQ_API_KEY = os.environ['GROQ_API_KEY'].strip()
