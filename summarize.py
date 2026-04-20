@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import requests
 from datetime import datetime, timedelta, timezone
 from config import GROQ_API_KEY
@@ -103,20 +104,21 @@ def summarize(data, date_label):
 {messages_text}
 
 ## 任务
-按地区分类（伊朗、俄罗斯、中国），对每个地区的消息进行翻译和深度整理。
+根据消息内容自动识别涉及的国家/地区，按地区分类进行翻译和深度整理。
 
 ## 输出格式
-对每个有消息的地区，输出以下格式（用 === 分隔地区）：
+对每个涉及的地区，输出以下格式（用 === 分隔地区）：
 
 ===地区名===
 标题：一句话总结该地区本期的核心动态
 内容：
 用多个加粗小标题分段（如 **断网现状：** **技术动态：** **社会影响：** 等），每段详细展开。要求：
+- 地区名用简体中文（如：伊朗、俄罗斯、中国、土耳其、缅甸等）
 - 所有非简体中文内容必须翻译为简体中文
 - 保留所有具体数字（天数、小时、百分比、地区数量等）
 - 保留所有技术术语（SNI Spoofing、DPI、VLESS、NAT、Domain Fronting 等）
 - 每条有实质内容的原始消息都必须被覆盖，不要遗漏
-- 如果某地区没有消息，写"本期无相关消息"
+- 只输出有消息的地区，没有消息的地区不要输出
 ===END===
 
 最后输出：
@@ -131,59 +133,64 @@ def summarize(data, date_label):
 
     result = call_groq(prompt)
 
-    regions = {
-        '伊朗': {'color': '#dc2626', 'bg': '#fef2f2', 'flag': '🇮🇷'},
-        '俄罗斯': {'color': '#2563eb', 'bg': '#eff6ff', 'flag': '🇷🇺'},
-        '中国': {'color': '#d97706', 'bg': '#fffbeb', 'flag': '🇨🇳'},
+    region_flags = {
+        '伊朗': '🇮🇷', '俄罗斯': '🇷🇺', '中国': '🇨🇳', '土耳其': '🇹🇷',
+        '缅甸': '🇲🇲', '巴基斯坦': '🇵🇰', '印度': '🇮🇳', '古巴': '🇨🇺',
+        '委内瑞拉': '🇻🇪', '埃塞俄比亚': '🇪🇹', '朝鲜': '🇰🇵', '越南': '🇻🇳',
+        '乌克兰': '🇺🇦', '白俄罗斯': '🇧🇾', '叙利亚': '🇸🇾', '苏丹': '🇸🇩',
     }
+    color_pool = [
+        {'color': '#dc2626', 'bg': '#fef2f2'},
+        {'color': '#2563eb', 'bg': '#eff6ff'},
+        {'color': '#d97706', 'bg': '#fffbeb'},
+        {'color': '#059669', 'bg': '#ecfdf5'},
+        {'color': '#7c3aed', 'bg': '#f5f3ff'},
+        {'color': '#db2777', 'bg': '#fdf2f8'},
+        {'color': '#0891b2', 'bg': '#ecfeff'},
+        {'color': '#ca8a04', 'bg': '#fefce8'},
+    ]
+
+    region_blocks = re.findall(r'===([^=]+?)===\s*(.*?)===END===', result, re.DOTALL)
+    region_blocks = [(name.strip(), body.strip()) for name, body in region_blocks
+                     if name.strip() != '业务影响']
 
     sections_html = ""
     business_html = ""
 
-    for region, style in regions.items():
-        marker = f"==={region}==="
-        if marker in result:
-            block = result.split(marker)[1].split("===END===")[0].strip()
-            if "===END===" not in result.split(marker)[1]:
-                block = result.split(marker)[1].strip()
+    for i, (region, block) in enumerate(region_blocks):
+        style = color_pool[i % len(color_pool)]
+        flag = region_flags.get(region, '🌐')
 
-            title_line = ""
-            content = block
-            if block.startswith("标题：") or block.startswith("标题:"):
-                lines = block.split("\n", 1)
-                title_line = lines[0].replace("标题：", "").replace("标题:", "").strip()
-                content = lines[1].strip() if len(lines) > 1 else ""
+        title_line = ""
+        content = block
+        if block.startswith("标题：") or block.startswith("标题:"):
+            lines = block.split("\n", 1)
+            title_line = lines[0].replace("标题：", "").replace("标题:", "").strip()
+            content = lines[1].strip() if len(lines) > 1 else ""
 
-            if content.startswith("内容：") or content.startswith("内容:"):
-                content = content.split("\n", 1)[1].strip() if "\n" in content else content.replace("内容：", "").replace("内容:", "")
+        if content.startswith("内容：") or content.startswith("内容:"):
+            content = content.split("\n", 1)[1].strip() if "\n" in content else content.replace("内容：", "").replace("内容:", "")
 
-            content_html = ""
-            for para in content.split("\n\n"):
+        content_html = ""
+        for para in content.split("\n\n"):
+            para = para.strip()
+            if para:
+                para = para.replace("\n", "<br>")
+                content_html += f"<p>{para}</p>\n"
+        if not content_html:
+            for para in content.split("\n"):
                 para = para.strip()
                 if para:
-                    para = para.replace("\n", "<br>")
                     content_html += f"<p>{para}</p>\n"
-            if not content_html:
-                for para in content.split("\n"):
-                    para = para.strip()
-                    if para:
-                        content_html += f"<p>{para}</p>\n"
 
-            header_text = f"{style['flag']} {region}"
-            if title_line:
-                header_text += f"：{title_line}"
+        header_text = f"{flag} {region}"
+        if title_line:
+            header_text += f"：{title_line}"
 
-            sections_html += f"""
+        sections_html += f"""
 <h3 style="color: {style['color']}; margin-bottom: 8px;">{header_text}</h3>
 <div style="background: {style['bg']}; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; line-height: 1.8; font-size: 14px;">
 {content_html}
-</div>
-"""
-        else:
-            sections_html += f"""
-<h3 style="color: {style['color']}; margin-bottom: 8px;">{style['flag']} {region}：本期无相关消息</h3>
-<div style="background: {style['bg']}; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; line-height: 1.8; font-size: 14px;">
-<p>本期监控的频道中未发现与{region}相关的新消息。</p>
 </div>
 """
 
