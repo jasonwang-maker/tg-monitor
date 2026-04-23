@@ -2,7 +2,7 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from telethon import TelegramClient
-from config import API_ID, API_HASH, SESSION_NAME, CHANNELS
+from config import API_ID, API_HASH, SESSION_NAME, CHANNELS, NOISY_CHANNELS, NOISY_MIN_LENGTH, NOISY_KEYWORDS
 
 WORK_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(WORK_DIR, 'data')
@@ -13,6 +13,11 @@ TZ_UTC8 = timezone(timedelta(hours=8))
 client = TelegramClient(os.path.join(WORK_DIR, SESSION_NAME), API_ID, API_HASH)
 
 
+def _is_relevant(text, keywords):
+    t = text.lower()
+    return any(kw.lower() in t for kw in keywords)
+
+
 async def fetch_channel(channel, since, until):
     try:
         entity = await client.get_entity(channel)
@@ -21,21 +26,33 @@ async def fetch_channel(channel, since, until):
         print(f"  ✗ @{channel}: {e}")
         return None, []
 
+    is_noisy = channel in NOISY_CHANNELS
     messages = []
+    raw_count = 0
     async for msg in client.iter_messages(entity, offset_date=until, limit=None):
         if msg.date < since:
             break
-        if msg.text:
-            messages.append({
-                "id": msg.id,
-                "date": msg.date.astimezone(TZ_UTC8).strftime('%Y-%m-%d %H:%M:%S'),
-                "views": msg.views,
-                "forwards": msg.forwards,
-                "text": msg.text,
-            })
+        if not msg.text:
+            continue
+        raw_count += 1
+        if is_noisy:
+            if len(msg.text) < NOISY_MIN_LENGTH:
+                continue
+            if not _is_relevant(msg.text, NOISY_KEYWORDS):
+                continue
+        messages.append({
+            "id": msg.id,
+            "date": msg.date.astimezone(TZ_UTC8).strftime('%Y-%m-%d %H:%M:%S'),
+            "views": msg.views,
+            "forwards": msg.forwards,
+            "text": msg.text,
+        })
 
     messages.reverse()
-    print(f"  ✓ @{channel} ({title}): {len(messages)} 条")
+    if is_noisy:
+        print(f"  ✓ @{channel} ({title}): {len(messages)} 条 (原始 {raw_count} 条，已过滤)")
+    else:
+        print(f"  ✓ @{channel} ({title}): {len(messages)} 条")
     return title, messages
 
 
