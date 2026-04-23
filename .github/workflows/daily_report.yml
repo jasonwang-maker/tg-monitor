@@ -2,7 +2,7 @@ name: TG Daily Report
 
 on:
   schedule:
-    - cron: '50 1 * * *'  # UTC 01:50 = UTC+8 09:50
+    - cron: '50 21 * * *'  # UTC 21:50 = UTC+8 05:50, 加上排队延迟约 10:00 到
   workflow_dispatch:        # 允许手动触发
 
 jobs:
