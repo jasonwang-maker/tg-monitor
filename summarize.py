@@ -15,6 +15,7 @@ CHANNEL_DESC = {
     'zatelecom': '俄罗斯电信行业动态 (ЗаТелеком)',
     'INTERNETFORIRAN': '伊朗互联网自由',
     'vps_xhq': 'VPS信号旗播报 (中国/VPN行业)',
+    'projectXtls': 'Project X 翻墙协议开发 (VLESS/XTLS)',
 }
 
 HTML_TEMPLATE = """<html>

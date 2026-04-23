@@ -10,6 +10,7 @@ CHANNELS = [
     'zatelecom',
     'INTERNETFORIRAN',
     'vps_xhq',
+    'projectXtls',
 ]
 
 EMAIL_FROM = os.environ['EMAIL_FROM']
