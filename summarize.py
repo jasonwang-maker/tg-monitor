@@ -80,7 +80,7 @@ def call_gemini(prompt):
         )
         if resp.status_code == 200:
             parts = resp.json()["candidates"][0]["content"]["parts"]
-            return "".join(p.get("text", "") for p in parts if "thoughtSignature" not in p or "text" in p)
+            return "".join(p["text"] for p in parts if "text" in p and "thoughtSignature" not in p)
         if resp.status_code in (429, 500, 502, 503):
             wait = 10 * (attempt + 1)
             print(f"Gemini API {resp.status_code}, retrying in {wait}s... (attempt {attempt+1}/3)")
@@ -144,6 +144,8 @@ def summarize(data, date_label):
 - 没有消息就说没有，不要填充"""
 
     result = call_gemini(prompt)
+    print(f"AI 返回长度: {len(result)} 字符")
+    print(f"AI 返回前200字: {result[:200]}")
 
     region_flags = {
         '伊朗': '🇮🇷', '俄罗斯': '🇷🇺', '中国': '🇨🇳', '土耳其': '🇹🇷',
