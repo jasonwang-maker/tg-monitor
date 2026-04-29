@@ -62,22 +62,32 @@ def load_daily_json():
 
 
 def call_gemini(prompt):
+    import time
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-    resp = requests.post(
-        url,
-        headers={"Content-Type": "application/json"},
-        json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "maxOutputTokens": 8000,
-                "temperature": 0.2,
-            },
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "maxOutputTokens": 8000,
+            "temperature": 0.2,
         },
-        timeout=180,
-    )
+    }
+    for attempt in range(3):
+        resp = requests.post(
+            url,
+            headers={"Content-Type": "application/json"},
+            json=payload,
+            timeout=180,
+        )
+        if resp.status_code == 200:
+            parts = resp.json()["candidates"][0]["content"]["parts"]
+            return "".join(p.get("text", "") for p in parts if "thoughtSignature" not in p or "text" in p)
+        if resp.status_code in (429, 500, 502, 503):
+            wait = 10 * (attempt + 1)
+            print(f"Gemini API {resp.status_code}, retrying in {wait}s... (attempt {attempt+1}/3)")
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
     resp.raise_for_status()
-    parts = resp.json()["candidates"][0]["content"]["parts"]
-    return "".join(p.get("text", "") for p in parts if "thoughtSignature" not in p or "text" in p)
 
 
 def summarize(data, date_label):
