@@ -3,7 +3,7 @@ import os
 import re
 import requests
 from datetime import datetime, timedelta, timezone
-from config import GROQ_API_KEY
+from config import GEMINI_API_KEY
 
 WORK_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(WORK_DIR, 'data')
@@ -61,23 +61,23 @@ def load_daily_json():
         return json.load(f), date_label
 
 
-def call_groq(prompt):
+def call_gemini(prompt):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     resp = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json",
-        },
+        url,
+        headers={"Content-Type": "application/json"},
         json={
-            "model": "llama-3.3-70b-versatile",
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 6000,
-            "temperature": 0.2,
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "maxOutputTokens": 8000,
+                "temperature": 0.2,
+            },
         },
-        timeout=120,
+        timeout=180,
     )
     resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
+    parts = resp.json()["candidates"][0]["content"]["parts"]
+    return "".join(p.get("text", "") for p in parts if "thoughtSignature" not in p or "text" in p)
 
 
 def summarize(data, date_label):
@@ -133,7 +133,7 @@ def summarize(data, date_label):
 - 不要添加原文中不存在的数据或事件
 - 没有消息就说没有，不要填充"""
 
-    result = call_groq(prompt)
+    result = call_gemini(prompt)
 
     region_flags = {
         '伊朗': '🇮🇷', '俄罗斯': '🇷🇺', '中国': '🇨🇳', '土耳其': '🇹🇷',
