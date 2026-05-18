@@ -1,14 +1,13 @@
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from telethon import TelegramClient
 from config import API_ID, API_HASH, SESSION_NAME, CHANNELS, NOISY_CHANNELS, NOISY_MIN_LENGTH, NOISY_KEYWORDS
+from report_window import TZ_UTC8, get_report_window
 
 WORK_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(WORK_DIR, 'data')
 os.makedirs(DATA_DIR, exist_ok=True)
-
-TZ_UTC8 = timezone(timedelta(hours=8))
 
 client = TelegramClient(os.path.join(WORK_DIR, SESSION_NAME), API_ID, API_HASH)
 
@@ -60,18 +59,18 @@ async def main():
     await client.start()
 
     now = datetime.now(TZ_UTC8)
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday = today - timedelta(days=1)
+    report_start, report_end = get_report_window(now)
 
-    since_utc = yesterday.astimezone(timezone.utc)
-    until_utc = now.astimezone(timezone.utc)
+    since_utc = report_start.astimezone(timezone.utc)
+    until_utc = report_end.astimezone(timezone.utc)
 
-    date_label = yesterday.strftime('%Y-%m-%d')
-    print(f"抓取: {date_label} 00:00 ~ {now.strftime('%Y-%m-%d %H:%M')} (UTC+8)")
+    date_label = report_start.strftime('%Y-%m-%d')
+    print(f"运行时间: {now.strftime('%Y-%m-%d %H:%M:%S')} (UTC+8)")
+    print(f"抓取: {report_start.strftime('%Y-%m-%d %H:%M')} ~ {report_end.strftime('%Y-%m-%d %H:%M')} (UTC+8)")
 
     all_results = {
         "fetch_time": now.strftime('%Y-%m-%d %H:%M:%S UTC+8'),
-        "range": f"{date_label} 00:00 ~ {now.strftime('%Y-%m-%d %H:%M')} UTC+8",
+        "range": f"{report_start.strftime('%Y-%m-%d %H:%M')} ~ {report_end.strftime('%Y-%m-%d %H:%M')} UTC+8",
         "channels": {}
     }
 

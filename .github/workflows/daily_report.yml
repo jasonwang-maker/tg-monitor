@@ -2,7 +2,7 @@ name: TG Daily Report
 
 on:
   schedule:
-    - cron: '50 21 * * *'  # UTC 21:50 = UTC+8 05:50, 加上排队延迟约 10:00 到
+    - cron: '0 2 * * *'    # UTC 02:00 = UTC+8 10:00
   workflow_dispatch:        # 允许手动触发
 
 jobs:
@@ -38,6 +38,6 @@ jobs:
 
       - name: Send email
         run: |
-          DATE=$(python -c "from datetime import datetime,timedelta,timezone; print((datetime.now(timezone(timedelta(hours=8))).replace(hour=0,minute=0,second=0)-timedelta(days=1)).strftime('%Y-%m-%d'))")
+          DATE=$(python -c "from report_window import get_report_date_label; print(get_report_date_label())")
           TOTAL=$(python -c "import json; d=json.load(open('data/daily_${DATE}.json')); print(sum(len(v['messages']) for v in d['channels'].values()))")
           python send_email.py "📡 TG 频道监控日报 ${DATE} (${TOTAL}条新消息)" "data/report_${DATE}.html"

@@ -2,12 +2,12 @@ import json
 import os
 import re
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from config import GEMINI_API_KEY
+from report_window import TZ_UTC8, get_report_date_label
 
 WORK_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(WORK_DIR, 'data')
-TZ_UTC8 = timezone(timedelta(hours=8))
 
 CHANNEL_DESC = {
     'netblocks': '全球断网/封锁实时监测',
@@ -50,10 +50,7 @@ HTML_TEMPLATE = """<html>
 
 
 def load_daily_json():
-    now = datetime.now(TZ_UTC8)
-    yesterday = (now.replace(hour=0, minute=0, second=0, microsecond=0)
-                 - timedelta(days=1))
-    date_label = yesterday.strftime('%Y-%m-%d')
+    date_label = get_report_date_label()
     path = os.path.join(DATA_DIR, f"daily_{date_label}.json")
     if not os.path.exists(path):
         raise FileNotFoundError(f"未找到: {path}")
