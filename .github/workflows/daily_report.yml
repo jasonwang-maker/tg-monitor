@@ -1,8 +1,9 @@
 name: TG Daily Report
 
 on:
-  schedule:
-    - cron: '0 2 * * *'    # UTC 02:00 = UTC+8 10:00
+  # 定时触发已暂停 (2026-06-22)。恢复时取消下面两行注释即可：
+  # schedule:
+  #   - cron: '0 2 * * *'    # UTC 02:00 = UTC+8 10:00
   workflow_dispatch:        # 允许手动触发
 
 jobs:
